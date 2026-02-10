@@ -1,0 +1,26 @@
+{
+  "id": "openclaw-vertex-memorybank",
+  "name": "Memory (Vertex AI Memory Bank)",
+  "kind": "general",
+  "configSchema": {
+    "type": "object",
+    "required": ["projectId", "location", "reasoningEngineId"],
+    "properties": {
+      "projectId": { "type": "string", "description": "GCP project ID or number" },
+      "location": { "type": "string", "description": "GCP region (e.g. us-central1)" },
+      "reasoningEngineId": { "type": "string", "description": "Agent Engine reasoning engine ID" },
+      "scope": { "type": "object", "description": "Memory scope for isolation (default: {agent_name: 'openclaw'})" },
+      "autoRecall": { "type": "boolean", "description": "Retrieve and inject memories before each turn (default: true)" },
+      "autoCapture": { "type": "boolean", "description": "Extract and store memories after each turn (default: true)" },
+      "autoSyncFiles": { "type": "boolean", "description": "Sync memory markdown files on startup and after each turn (default: true)" },
+      "autoSyncTopics": { "type": "boolean", "description": "Auto-configure memory topics on startup (default: true)" },
+      "memoryTopics": { "type": "array", "description": "Custom memory topics (sensible defaults provided)" },
+      "perspective": { "type": "string", "enum": ["first", "third"], "description": "Memory perspective (default: third)" },
+      "topK": { "type": "number", "description": "Max memories to retrieve per query (default: 10)" },
+      "maxDistance": { "type": "number", "description": "Max similarity distance for recall. Lower = stricter (default: no filtering)" },
+      "backgroundGenerate": { "type": "boolean", "description": "Fire-and-forget memory generation (default: true)" },
+      "ttlSeconds": { "type": "number", "description": "Auto-expire memories after this many seconds (default: no expiry)" },
+      "introspection": { "type": "string", "enum": ["off", "scores"], "description": "Metadata in auto-recalled memories: 'off' = just facts, 'scores' = facts + similarity score (default: scores)" }
+    }
+  }
+}
