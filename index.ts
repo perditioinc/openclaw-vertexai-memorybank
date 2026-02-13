@@ -221,3 +221,117 @@ async function apiCall(cfg: MemoryBankConfig, path: string, body: any, method = 
   }
   return res.json();
 }
+
+// --- Core operations ---
+
+async function retrieveMemories(cfg: MemoryBankConfig, query: string): Promise<any[]> {
+  const parent = parentName(cfg);
+  const scope = cfg.scope || { agent_name: "openclaw" };
+  const topK = cfg.topK || 10;
+  try {
+    const result = await apiCall(cfg, `${parent}/memories:retrieve`, {
+      scope,
+      similaritySearchParams: { searchQuery: query, topK },
+    });
+    const memories = result.retrievedMemories || [];
+    const maxDist = cfg.maxDistance;
+    if (maxDist != null) {
+      const filtered = memories.filter((m: any) => m.distance != null && m.distance <= maxDist);
+      if (filtered.length < memories.length) {
+        console.log(`[memory-vertex] relevance filter: ${filtered.length}/${memories.length} memories passed (maxDistance=${maxDist})`);
+      }
+      return filtered;
+    }
+    return memories;
+  } catch (e: any) {
+    console.error(`[memory-vertex] retrieve error: ${e.message}`);
+    return [];
+  }
+}
+
+// Send last message pair to Memory Bank. It handles extraction + consolidation.
+async function captureFromConversation(
+  cfg: MemoryBankConfig,
+  messages: Array<{ role: string; content: string }>
+): Promise<void> {
+  const parent = parentName(cfg);
+  const scope = cfg.scope || { agent_name: "openclaw" };
+
+  // Only send the last user+assistant pair (not the whole conversation)
+  const lastPair = messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .slice(-2);
+
+  if (lastPair.length === 0) return;
+
+  const events = lastPair.map((m) => ({
+    content: {
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content.slice(0, 4000) }],
+    },
+  }));
+
+  try {
+    const result = await apiCall(cfg, `${parent}/memories:generate`, {
+      scope,
+      direct_contents_source: { events },
+      revision_labels: { source: "capture" },
+    });
+    // Log what Memory Bank returned
+    const generated = result.generatedMemories || [];
+    if (generated.length > 0) {
+      const created = generated.filter((m: any) => m.action === "CREATED").length;
+      const updated = generated.filter((m: any) => m.action === "UPDATED").length;
+      const deleted = generated.filter((m: any) => m.action === "DELETED").length;
+      const facts = generated
+        .filter((m: any) => m.action === "CREATED" || m.action === "UPDATED")
+        .map((m: any) => m.memory?.fact || "")
+        .filter((f: string) => f);
+      console.log(
+        `[memory-vertex] captured: ${created} new, ${updated} updated, ${deleted} deleted`
+      );
+      if (facts.length > 0) {
+        console.log(`[memory-vertex] facts: ${facts.join(" | ")}`);
+      }
+    } else {
+      console.log("[memory-vertex] capture queued (async generation)");
+    }
+  } catch (e: any) {
+    console.error(`[memory-vertex] capture error: ${e.message}`);
+  }
+}
+
+async function syncFiles(cfg: MemoryBankConfig, files: MemoryFile[]): Promise<void> {
+  const parent = parentName(cfg);
+  const scope = cfg.scope || { agent_name: "openclaw" };
+
+  for (const file of files) {
+    const chunks: string[] = [];
+    for (let i = 0; i < file.content.length; i += 2000) {
+      chunks.push(file.content.slice(i, i + 2000));
+    }
+
+    const events = chunks.map((chunk) => ({
+      content: {
+        role: "user" as const,
+        parts: [{ text: `[File: ${file.relativePath}]\n${chunk}` }],
+      },
+    }));
+
+    try {
+      await apiCall(cfg, `${parent}/memories:generate`, {
+        scope,
+        direct_contents_source: { events },
+        revision_labels: { source: "file-sync", file: file.relativePath },
+      });
+      syncIndex.entries[file.relativePath] = {
+        hash: file.hash,
+        syncedAt: new Date().toISOString(),
+      };
+      saveSyncIndex();
+      console.log(`[memory-vertex] synced file: ${file.relativePath}`);
+    } catch (e: any) {
+      console.error(`[memory-vertex] file sync error (${file.relativePath}): ${e.message}`);
+    }
+  }
+}
