@@ -335,3 +335,137 @@ async function syncFiles(cfg: MemoryBankConfig, files: MemoryFile[]): Promise<vo
     }
   }
 }
+
+async function syncInstanceConfig(cfg: MemoryBankConfig): Promise<void> {
+  const parent = parentName(cfg);
+  const topics = cfg.memoryTopics || DEFAULT_TOPICS;
+  const perspective = cfg.perspective || "third";
+
+  try {
+    const token = getAccessToken();
+    const url = `${apiBase(cfg)}/${parent}?updateMask=contextSpec.memoryBankConfig`;
+
+    const customizationConfig: any = {
+      memory_topics: topics,
+      enable_third_person_memories: perspective !== "first",
+    };
+
+    // Add few-shot examples if using default topics
+    if (!cfg.memoryTopics) {
+      customizationConfig.generate_memories_examples = DEFAULT_FEW_SHOTS;
+    }
+
+    const memoryBankConfig: any = {
+      customization_configs: [customizationConfig],
+    };
+
+    // TTL: auto-expire memories after configured duration
+    if (cfg.ttlSeconds && cfg.ttlSeconds > 0) {
+      memoryBankConfig.ttl_config = {
+        generateCreatedTtl: `${cfg.ttlSeconds}s`,
+        generateUpdatedTtl: `${cfg.ttlSeconds}s`,
+      };
+    }
+
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        context_spec: { memory_bank_config: memoryBankConfig },
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Memory Bank API ${res.status}: ${text}`);
+    }
+
+    const parts = [`${topics.length} topics`, `${perspective}-person`];
+    if (cfg.ttlSeconds) parts.push(`TTL ${Math.round(cfg.ttlSeconds / 86400)}d`);
+    console.log(`[memory-vertex] synced config: ${parts.join(", ")}`);
+  } catch (e: any) {
+    console.error(`[memory-vertex] config sync error: ${e.message}`);
+  }
+}
+
+// --- Lightweight context for memory generation (avoids passing full config) ---
+interface GenerateContext {
+  location: string;
+  parent: string;
+  scope: Record<string, string>;
+}
+
+function toGenerateContext(cfg: MemoryBankConfig): GenerateContext {
+  return {
+    location: cfg.location,
+    parent: parentName(cfg),
+    scope: cfg.scope || { agent_name: "openclaw" },
+  };
+}
+
+// --- Fire-and-forget API call (no response parsing, no LRO wait) ---
+async function fireAndForget(ctx: GenerateContext, path: string, body: any): Promise<void> {
+  const token = getAccessToken();
+  const url = `https://${ctx.location}-aiplatform.googleapis.com/v1beta1/${path}`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      console.error(`[memory-vertex] fire-and-forget ${res.status}: ${text.slice(0, 200)}`);
+    }
+  } catch (e: any) {
+    console.error(`[memory-vertex] fire-and-forget error: ${e.message}`);
+  }
+}
+
+// --- Direct memory creation (via consolidation pipeline) ---
+interface CreateMemoryOptions {
+  /** If true, await the full response. If false (default), fire-and-forget. */
+  waitForResult?: boolean;
+  /** Source label for tracing (e.g. "capture", "file-sync", "cli-remember") */
+  source?: string;
+}
+
+async function createMemory(
+  cfg: MemoryBankConfig,
+  fact: string,
+  options: CreateMemoryOptions = {},
+): Promise<void> {
+  const ctx = toGenerateContext(cfg);
+  const { waitForResult = false, source = "unknown" } = options;
+  const body: any = {
+    scope: ctx.scope,
+    direct_memories_source: {
+      direct_memories: [{ fact }],
+    },
+    revision_labels: { source },
+  };
+
+  if (!waitForResult) {
+    // Fire-and-forget: don't block the agent
+    await fireAndForget(ctx, `${ctx.parent}/memories:generate`, body);
+    console.log(`[memory-vertex] remember fired (bg): ${fact}`);
+    return;
+  }
+
+  // Synchronous: wait for consolidation result
+  try {
+    const result = await apiCall(cfg, `${ctx.parent}/memories:generate`, body);
+    const generated = result.generatedMemories || [];
+    const created = generated.filter((m: any) => m.action === "CREATED").length;
+    const updated = generated.filter((m: any) => m.action === "UPDATED").length;
+    if (created > 0 || updated > 0) {
+      console.log(`[memory-vertex] remembered (${created} new, ${updated} updated): ${fact}`);
+    } else if (generated.length === 0) {
+      console.log(`[memory-vertex] remember queued/deduped: ${fact}`);
+    } else {
+      console.log(`[memory-vertex] remembered: ${fact}`);
+    }
+  } catch (e: any) {
+    console.error(`[memory-vertex] create memory error: ${e.message}`);
+    throw e;
+  }
+}
