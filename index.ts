@@ -469,3 +469,145 @@ async function createMemory(
     throw e;
   }
 }
+
+// --- Delete a memory ---
+async function deleteMemory(cfg: MemoryBankConfig, memoryId: string): Promise<void> {
+  const parent = parentName(cfg);
+  const token = getAccessToken();
+  const url = `https://${cfg.location}-aiplatform.googleapis.com/v1beta1/${parent}/memories/${memoryId}`;
+  const resp = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`Memory Bank API ${resp.status}: ${body}`);
+  }
+  console.log(`[memory-vertex] deleted memory: ${memoryId}`);
+}
+
+// --- Memory counting ---
+//
+// TODO(google-api): The memories.list endpoint does NOT return a totalSize field,
+// and there is no memories:count RPC. We verified this by:
+//   1. Requesting $fields=totalSize — returns "Cannot find matching fields for path 'totalSize'"
+//   2. Checking discovery doc — only list/get/create/patch/delete/generate/retrieve/rollback/purge
+//   3. Checking v1alpha1 — returns 404 (does not exist)
+//   4. Max pageSize is 100 even when requesting 1000
+//
+// This means counting requires paginating through ALL memories. We mitigate this by:
+//   - Using $fields=memories/name,nextPageToken to return only resource names (~12KB/page)
+//   - Caching the count in-memory with a 5-minute TTL
+//   - Auto-incrementing/decrementing on create/delete within the session
+//
+// When Google adds totalSize or a count RPC to the memories.list response,
+// this pagination loop should be replaced with a single API call.
+// Track: https://google.aip.dev/132 (standard List should include totalSize)
+
+interface CountCache {
+  count: number;
+  fetchedAt: number;
+}
+
+const COUNT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+let countCache: CountCache | null = null;
+
+/**
+ * Count memories using field-masked pagination (lightweight, no LLM calls).
+ * Returns only resource names to minimize payload (~120 bytes/memory vs full objects).
+ */
+async function countMemories(cfg: MemoryBankConfig, opts?: { force?: boolean }): Promise<number> {
+  // Return cached count if fresh
+  if (!opts?.force && countCache && (Date.now() - countCache.fetchedAt) < COUNT_CACHE_TTL_MS) {
+    return countCache.count;
+  }
+
+  const parent = parentName(cfg);
+  const scope = cfg.scope || { agent_name: "openclaw" };
+  let total = 0;
+  let pageToken: string | undefined;
+
+  try {
+    do {
+      const params = new URLSearchParams();
+      params.set("pageSize", "100");
+      params.set("filter", `scope="${JSON.stringify(scope).replace(/"/g, '\\"')}"`);
+      // Field mask: only return memory names + pagination token (no facts, topics, timestamps)
+      params.set("$fields", "memories/name,nextPageToken");
+      if (pageToken) params.set("pageToken", pageToken);
+
+      const token = getAccessToken();
+      const url = `${apiBase(cfg)}/${parent}/memories?${params.toString()}`;
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Memory Bank API ${res.status}: ${text}`);
+      }
+      const result = await res.json();
+      total += (result.memories || []).length;
+      pageToken = result.nextPageToken;
+    } while (pageToken);
+
+    countCache = { count: total, fetchedAt: Date.now() };
+    return total;
+  } catch (e: any) {
+    console.error(`[memory-vertex] count error: ${e.message}`);
+    // Return stale cache if available, otherwise 0
+    return countCache?.count ?? 0;
+  }
+}
+
+/** Adjust cached count without re-fetching (call after create/delete). */
+function adjustCachedCount(delta: number): void {
+  if (countCache) {
+    countCache.count = Math.max(0, countCache.count + delta);
+  }
+}
+
+/**
+ * List all memories in scope with full details (paginated).
+ * Use countMemories() instead when you only need the count.
+ */
+async function listMemories(
+  cfg: MemoryBankConfig,
+  scope?: Record<string, string>
+): Promise<any[]> {
+  const parent = parentName(cfg);
+  const effectiveScope = scope || cfg.scope || { agent_name: "openclaw" };
+  const all: any[] = [];
+  let pageToken: string | undefined;
+
+  try {
+    do {
+      const params = new URLSearchParams();
+      params.set("pageSize", "100");
+      params.set("filter", `scope="${JSON.stringify(effectiveScope).replace(/"/g, '\\"')}"`);
+      if (pageToken) params.set("pageToken", pageToken);
+
+      const token = getAccessToken();
+      const url = `${apiBase(cfg)}/${parent}/memories?${params.toString()}`;
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Memory Bank API ${res.status}: ${text}`);
+      }
+      const result = await res.json();
+      const memories = result.memories || [];
+      all.push(...memories.map((m: any) => ({ memory: m })));
+      pageToken = result.nextPageToken;
+    } while (pageToken);
+
+    // Update count cache as a side effect
+    countCache = { count: all.length, fetchedAt: Date.now() };
+    return all;
+  } catch (e: any) {
+    console.error(`[memory-vertex] list error: ${e.message}`);
+    return all;
+  }
+}
