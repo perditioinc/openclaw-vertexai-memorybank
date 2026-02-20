@@ -723,3 +723,83 @@ const plugin = {
         }
       });
     }
+
+    // --- Agent tools ---
+
+    // memory_search — Search memories by semantic similarity
+    api.registerTool({
+      name: "memory_search",
+      description: "Search the Memory Bank for memories semantically similar to a query. Returns matching facts with similarity scores, topics, and timestamps.",
+      label: "Memory Search",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Semantic search query" },
+          top_k: { type: "number", description: "Max results to return (default: 10)" },
+        },
+        required: ["query"],
+      },
+      async execute(_toolCallId: string, params: { query: string; top_k?: number }) {
+        const searchConfig = { ...config, topK: params.top_k || config.topK || 10 };
+        const memories = await retrieveMemories(searchConfig, params.query);
+        const results = memories.map((m: any, i: number) => {
+          const mem = m.memory || m;
+          return {
+            index: i + 1,
+            id: mem.name || mem.id || null,
+            fact: mem.fact || JSON.stringify(mem),
+            score: m.score ?? m.similarity ?? m.distance ?? null,
+            topic: mem.topics || mem.topic || mem.memoryTopic || null,
+            created: mem.createTime || mem.createdAt || null,
+            updated: mem.updateTime || mem.updatedAt || null,
+          };
+        });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ count: results.length, memories: results }, null, 2) }],
+          details: { count: results.length },
+        };
+      },
+    });
+
+    // memory_forget — Delete a memory by ID
+    api.registerTool({
+      name: "memory_forget",
+      description: "Delete (forget) a specific memory by its ID. Permanently removes it from the Memory Bank.",
+      label: "Memory Forget",
+      parameters: {
+        type: "object",
+        properties: {
+          memory_id: { type: "string", description: "The memory ID (resource name) to delete" },
+        },
+        required: ["memory_id"],
+      },
+      async execute(_toolCallId: string, params: { memory_id: string }) {
+        const parent = parentName(config);
+        const memoryName = params.memory_id.includes("/") ? params.memory_id : `${parent}/memories/${params.memory_id}`;
+        try {
+          const token = getAccessToken();
+          const url = `${apiBase(config)}/${memoryName}`;
+          const res = await fetch(url, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            return {
+              content: [{ type: "text" as const, text: `Failed to delete memory: ${res.status} ${text}` }],
+              details: { deleted: false },
+            };
+          }
+          adjustCachedCount(-1);
+          return {
+            content: [{ type: "text" as const, text: `Memory deleted: ${params.memory_id}` }],
+            details: { deleted: true },
+          };
+        } catch (e: any) {
+          return {
+            content: [{ type: "text" as const, text: `Error deleting memory: ${e.message}` }],
+            details: { deleted: false, error: e.message },
+          };
+        }
+      },
+    });
