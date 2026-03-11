@@ -54,16 +54,9 @@ This plugin gives your OpenClaw agent **persistent, cross-session memory** using
 
 ## Installation
 
-```bash
-git clone https://github.com/Shubhamsaboo/openclaw-vertex-memorybank.git
-cd openclaw-vertex-memorybank
-npm install && npm run build
-openclaw plugins install .
-```
+### 1. Add plugin config to `openclaw.json`
 
-<!-- TODO: Alternative install via https://clawhub.ai/ when published -->
-
-Add to your `openclaw.json`:
+Add the config **before** installing — the plugin requires three fields to validate during install:
 
 ```json
 {
@@ -82,7 +75,39 @@ Add to your `openclaw.json`:
 }
 ```
 
-Three fields, everything else has sensible defaults. Restart OpenClaw after configuring.
+### 2. Clone, build, install
+
+```bash
+git clone https://github.com/Shubhamsaboo/openclaw-vertexai-memorybank.git
+cd openclaw-vertexai-memorybank
+npm install && npm run build
+openclaw plugins install .
+```
+
+<!-- TODO: Alternative install via https://clawhub.ai/ when published -->
+
+### 3. Trust the plugin (recommended)
+
+After install, add `plugins.allow` to your `openclaw.json` to explicitly trust the plugin and silence the "non-bundled plugin auto-load" warning:
+
+```json
+{
+  "plugins": {
+    "allow": ["openclaw-vertex-memorybank"],
+    "entries": { ... }
+  }
+}
+```
+
+> **Why not add `allow` in step 1?** OpenClaw validates that allowed plugins are actually installed — adding it before install causes a validation error.
+
+### 4. Restart
+
+```bash
+openclaw restart
+```
+
+The plugin loads on gateway startup — a restart is required after install.
 
 ### Bootstrapping from existing sessions
 
