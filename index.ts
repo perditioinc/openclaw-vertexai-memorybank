@@ -107,7 +107,7 @@ const DEFAULT_FEW_SHOTS = [
       ],
     },
     generatedMemories: [
-      { fact: "The user does not want memories to expire. TTL should not be enabled by default." },
+      { fact: "The user does not want memories to expire. TTL should not be enabled by default.", topics: [{ managed_memory_topic: "USER_PREFERENCES" }] },
     ],
   },
   // Positive: user preference
@@ -119,7 +119,7 @@ const DEFAULT_FEW_SHOTS = [
       ],
     },
     generatedMemories: [
-      { fact: "The user prefers not to bump versions for incremental changes." },
+      { fact: "The user prefers not to bump versions for incremental changes.", topics: [{ managed_memory_topic: "USER_PREFERENCES" }] },
     ],
   },
 ];
