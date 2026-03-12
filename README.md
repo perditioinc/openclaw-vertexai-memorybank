@@ -1,26 +1,28 @@
-# openclaw-vertex-memorybank
+# openclaw-vertexai-memorybank
 
 Managed long-term memory for your OpenClaw agents, powered by [Vertex AI Memory Bank](https://docs.cloud.google.com/agent-builder/agent-engine/memory-bank/overview).
 
 ### Why you need memory beyond OpenClaw core
 
-OpenClaw's built-in memory is per-agent and per-session. This plugin adds **user-scoped memory that works across all your agents** — so when you tell one agent your preferences, every agent remembers. Scope by user, by project, or however you want. Your agent's memory grows with you, not with each individual chat.
+OpenClaw's built-in memory is per-agent and per-session. This plugin adds **user-scoped memory that works across all your agents**, so when you tell one agent your preferences, every agent remembers. Scope by user, by project, or however you want. Your agent's memory grows with you, not with each individual chat.
 
 ### Why Vertex AI Memory Bank
 
-Built by Google DeepMind & Google Cloud. Fully managed — no vector database to run, no embeddings to maintain, no infrastructure to monitor. Your data stays in your GCP project, private by default. Generous free tier (1,000 retrievals/month free). The extraction and consolidation LLM handles deduplication, contradiction resolution, and fact merging automatically.
+Fully managed with no vector database to run, no embeddings to maintain, no infrastructure to monitor. Your data stays in your GCP project, private by default. Generous free tier (1,000 retrievals/month free). The extraction and consolidation LLM handles deduplication, contradiction resolution, and fact merging automatically.
 
 ### Token-efficient and effective
 
-Memories are extracted facts, not raw conversation logs. Only relevant memories are injected per turn via similarity search — not your entire history. The result: your agent gets better context in fewer tokens. Don't trust us — compare recall quality and token usage yourself.
+Memories are extracted facts, not raw conversation logs. Only relevant memories are injected per turn via similarity search, not your entire history. The result: your agent gets better context in fewer tokens.
 
 ---
 
 ![Architecture](architecture.jpg)
 
+> **Disclaimer**: This is **not** an officially supported Google product.
+
 ## What It Does
 
-This plugin gives your OpenClaw agent **persistent, cross-session memory** using Vertex AI's Memory Bank:
+This plugin gives your OpenClaw agent **persistent, cross-session memory** using Vertex AI Memory Bank:
 
 - **Auto-recall**: Before each turn, relevant memories are retrieved via similarity search and injected into context
 - **Auto-capture**: After each turn, the last message pair is sent to Memory Bank for fact extraction and storage
@@ -30,7 +32,7 @@ This plugin gives your OpenClaw agent **persistent, cross-session memory** using
 - **Topic sync**: Memory topics, perspective, and few-shot examples are auto-configured on the Agent Engine instance at startup
 - **Agent tools**: Search, forget, correct, and inspect memory stats directly from conversation
 - **CLI tools**: Search, create (via consolidation pipeline), and delete memories directly from the command line
-- **Managed infrastructure**: No vector DB, no local database. Google handles storage, embeddings, extraction, and retrieval
+- **Managed infrastructure**: No vector DB, no local database. Vertex AI Memory Bank handles storage, embeddings, extraction, and retrieval
 
 > **Note:** This plugin runs _alongside_ OpenClaw's built-in `memory-core`. It adds cloud-backed long-term memory on top.
 
@@ -56,7 +58,7 @@ This plugin gives your OpenClaw agent **persistent, cross-session memory** using
 
 ### 1. Add plugin config to `openclaw.json`
 
-Add the config **before** installing — the plugin requires three fields to validate during install:
+Add the config **before** installing the plugin. It requires three fields to validate during install:
 
 ```json
 {
@@ -84,9 +86,7 @@ npm install && npm run build
 openclaw plugins install .
 ```
 
-<!-- TODO: Alternative install via https://clawhub.ai/ when published -->
-
-### 3. Trust the plugin (recommended)
+### 3. Add to allowlist (recommended)
 
 After install, add `plugins.allow` to your `openclaw.json` to explicitly trust the plugin and silence the "non-bundled plugin auto-load" warning:
 
@@ -99,7 +99,7 @@ After install, add `plugins.allow` to your `openclaw.json` to explicitly trust t
 }
 ```
 
-> **Why not add `allow` in step 1?** OpenClaw validates that allowed plugins are actually installed — adding it before install causes a validation error.
+> **Why not add `allow` in step 1?** Because OpenClaw checks that allowed plugins are already installed. If you add it before installing, you'll get a validation error.
 
 ### 4. Restart
 
@@ -107,7 +107,7 @@ After install, add `plugins.allow` to your `openclaw.json` to explicitly trust t
 openclaw restart
 ```
 
-The plugin loads on gateway startup — a restart is required after install.
+The plugin loads on gateway startup, so a restart is required after install.
 
 ### Bootstrapping from existing sessions
 
@@ -115,7 +115,7 @@ After install, your agent starts with an empty memory. To catch up on context fr
 
 > *"Generate memories from my last few days of sessions."*
 
-The agent can parse your session history and backfill Memory Bank with extracted facts. This gives you immediate value — your agent will recall decisions, preferences, and context from recent work without waiting for new conversations to build up memory organically.
+The agent can parse your session history and backfill Memory Bank with extracted facts. This gives you immediate value and your agent will recall decisions, preferences, and context from recent work without waiting for new conversations to build up memory organically.
 
 ## How It Works
 
@@ -146,7 +146,7 @@ User message arrives
 - **Few-shot examples** teach Memory Bank's extraction LLM what to capture (decisions, preferences) and what to ignore (status checks, debugging chatter)
 - **File sync** tracks SHA-256 hashes of workspace files and only re-syncs when content changes
 - **Topic sync** auto-configures memory topics, perspective, and few-shot examples on the Agent Engine instance at startup
-- **Consolidation** is handled by Memory Bank for all write paths — conversation capture, file sync, and direct writes (`memorybank-remember`) all route through `GenerateMemories` with `direct_memories_source`. When a new fact contradicts an existing memory, it updates in place (e.g., "repo has 91K stars" becomes "repo has 100K stars"). No facts bypass the consolidation pipeline
+- **Consolidation** is handled by Memory Bank for all write paths. Conversation capture uses `direct_contents_source` (events format), while file sync and direct writes (`memorybank-remember`) use `direct_memories_source` (raw facts). All route through `GenerateMemories`. When a new fact contradicts an existing memory, it updates in place (e.g., "repo has 91K stars" becomes "repo has 100K stars"). No facts bypass the consolidation pipeline
 - Authentication uses Google Application Default Credentials (ADC)
 
 ## Configuration
@@ -165,7 +165,7 @@ User message arrives
 | `perspective` | `"first"` \| `"third"` | `"third"` | Memory perspective |
 | `topK` | number | `10` | Max memories per query |
 | `maxDistance` | number | none | Max similarity distance for recall. Lower = stricter. Memories above this are filtered out |
-| `backgroundGenerate` | boolean | `true` | Non-blocking capture |
+| `backgroundGenerate` | boolean | `true` | Non-blocking file sync (capture is always async) |
 | `ttlSeconds` | number | none | Auto-expire memories (seconds). Default: no expiry |
 | `introspection` | `"off"` \| `"scores"` | `"scores"` | Metadata in auto-recalled memories. `"off"` = just facts, `"scores"` = facts + similarity score |
 
@@ -193,13 +193,13 @@ You can override these by providing your own `memoryTopics` array with custom fe
 
 ### Memory Scoping
 
-The `scope` field controls memory isolation. It's an arbitrary key-value object — you define the keys. **Scope matching is exact**: memories are only returned when all scope keys match exactly, and consolidation (dedup, contradiction resolution) only happens within the same scope.
+The `scope` field controls memory isolation. It's an arbitrary key-value object where you define the keys. **Scope matching is exact**: memories are only returned when all scope keys match exactly, and consolidation (dedup, contradiction resolution) only happens within the same scope.
 
 This means scope determines both **who can see** a memory and **what gets merged together**.
 
 **Recommended: scope by `user_id` only** for cross-agent memory sharing:
 
-```json
+```jsonc
 // Recommended: shared across all agents for the same user
 { "user_id": "shubham" }
 
@@ -212,7 +212,7 @@ This means scope determines both **who can see** a memory and **what gets merged
 
 > **Tip:** If you scope as `{user_id: "alan", agent_name: "zaf"}`, memories created by agent "zaf" won't be found by agent "helper" for the same user. Use `user_id`-only scoping unless you specifically want agent isolation.
 
-Scope is **immutable** once set on a memory — choose your scoping strategy before backfilling. See the [Memory Bank scoping documentation](https://docs.cloud.google.com/agent-builder/agent-engine/memory-bank/overview#memory-scope) for more details.
+Scope is **immutable** once set on a memory, so choose your scoping strategy before backfilling. See the [Memory Bank scoping documentation](https://docs.cloud.google.com/agent-builder/agent-engine/memory-bank/overview#memory-scope) for more details.
 
 ## Agent Tools
 
@@ -220,7 +220,7 @@ The plugin registers four tools that the agent can call directly during conversa
 
 | Tool | Description |
 |------|-------------|
-| `memory_search` | Semantic search — returns facts with similarity scores, topics, timestamps, and memory IDs |
+| `memory_search` | Semantic search that returns facts with similarity scores, topics, timestamps, and memory IDs |
 | `memory_forget` | Delete a specific memory by ID. Useful when the agent discovers outdated or incorrect information |
 | `memory_correct` | Update a memory's fact text in place (PATCH with exponential backoff retry; if memory is missing, creates via consolidation pipeline) |
 | `memory_stats` | Total memory count, breakdown by topic, and scope info. Uses lightweight field-masked counting |
@@ -251,7 +251,7 @@ openclaw memorybank-search "project architecture decisions" --top-k 5 --show-ids
 List all memories in the current scope. Use `--show-ids` to reveal memory IDs. Use `--count-only` for a fast, lightweight count using field-masked API calls (no full memory objects fetched).
 
 ### `memorybank-remember <fact>`
-Store a fact via Memory Bank's consolidation pipeline (`GenerateMemories` with `direct_memories_source`). The fact goes through the same deduplication, contradiction resolution, and merging as conversation-captured memories — it's never a raw insert. Useful for cron jobs, scripts, or seeding initial knowledge.
+Store a fact via Memory Bank's consolidation pipeline (`GenerateMemories` with `direct_memories_source`). The fact goes through the same deduplication, contradiction resolution, and merging as conversation-captured memories, so it's never a raw insert. Useful for cron jobs, scripts, or seeding initial knowledge.
 ```bash
 openclaw memorybank-remember "The deployment uses us-central1 region"
 ```
@@ -276,7 +276,7 @@ Vertex AI Memory Bank pricing (as of 2026):
 |----------|------|-------|
 | **Memory storage** | $0.25 per 1,000 memories / month | Scales with memory count |
 | **Memory retrieval** | $0.50 per 1,000 memories returned | First 1,000/month **free** |
-| **Memory generation** | Gemini token costs only (~$0.0003–$0.001/call) | No per-call API fee |
+| **Memory generation** | Gemini token costs only (~$0.0003-$0.001/call) | No per-call API fee |
 
 **Example monthly cost (single user, ~50 turns/day):**
 - Storage: ~$0.25 (1K memories)
@@ -284,7 +284,7 @@ Vertex AI Memory Bank pricing (as of 2026):
 - Generation: ~$0.50 (capture + file syncs)
 - **Total: ~$8/month**
 
-For most personal/small-team usage, costs are minimal. Retrieval is the largest line item at scale — consider caching if you run multiple agents.
+For most personal/small-team usage, costs are minimal. Retrieval is the largest line item at scale, consider caching if you run multiple agents.
 
 See [Vertex AI pricing](https://cloud.google.com/vertex-ai/pricing#vertex-ai-agent-engine) and [FAQ.md](FAQ.md) for detailed cost breakdowns.
 
