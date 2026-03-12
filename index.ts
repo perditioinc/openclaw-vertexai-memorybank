@@ -271,34 +271,14 @@ async function captureFromConversation(
     },
   }));
 
-  try {
-    const result = await apiCall(cfg, `${parent}/memories:generate`, {
-      scope,
-      direct_contents_source: { events },
-      revision_labels: { source: "capture" },
-    });
-    // Log what Memory Bank returned
-    const generated = result.generatedMemories || [];
-    if (generated.length > 0) {
-      const created = generated.filter((m: any) => m.action === "CREATED").length;
-      const updated = generated.filter((m: any) => m.action === "UPDATED").length;
-      const deleted = generated.filter((m: any) => m.action === "DELETED").length;
-      const facts = generated
-        .filter((m: any) => m.action === "CREATED" || m.action === "UPDATED")
-        .map((m: any) => m.memory?.fact || "")
-        .filter((f: string) => f);
-      console.log(
-        `[memory-vertex] captured: ${created} new, ${updated} updated, ${deleted} deleted`
-      );
-      if (facts.length > 0) {
-        console.log(`[memory-vertex] facts: ${facts.join(" | ")}`);
-      }
-    } else {
-      console.log("[memory-vertex] capture queued (async generation)");
-    }
-  } catch (e: any) {
-    console.error(`[memory-vertex] capture error: ${e.message}`);
-  }
+  // Fire-and-forget: don't block agent waiting for consolidation results
+  const ctx = toGenerateContext(cfg);
+  await fireAndForget(ctx, `${ctx.parent}/memories:generate`, {
+    scope: ctx.scope,
+    direct_contents_source: { events },
+    revision_labels: { source: "capture" },
+  });
+  console.log("[memory-vertex] capture fired (bg)");
 }
 
 async function syncFiles(cfg: MemoryBankConfig, files: MemoryFile[]): Promise<void> {
