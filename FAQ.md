@@ -220,21 +220,21 @@ Four tools via `api.registerTool()`, available to the agent during conversation:
 
 | Tool | What it does |
 |------|-------------|
-| `memory_search` | Semantic similarity search — returns facts, scores, topics, timestamps, and memory IDs |
-| `memory_forget` | Delete a memory by ID. Agent can clean up outdated/incorrect information |
-| `memory_correct` | Update a memory's fact text. Uses PATCH when supported, falls back to delete+regenerate |
-| `memory_stats` | Total count, topic breakdown, scope info. Uses lightweight field-masked counting |
+| `memorybank_search` | Semantic similarity search — returns facts, scores, topics, timestamps, and memory IDs |
+| `memorybank_forget` | Delete a memory by ID. Agent can clean up outdated/incorrect information |
+| `memorybank_correct` | Update a memory's fact text. Uses PATCH with exponential backoff retry; if memory is missing, creates via consolidation pipeline |
+| `memorybank_stats` | Total count, topic breakdown, scope info. Uses lightweight field-masked counting |
 
 **When would the agent use these?**
 
-- *"What do you remember about my project setup?"* → `memory_search`
-- *"That's wrong, I moved to us-east1"* → `memory_correct`
-- *"Forget everything about the old deployment"* → `memory_forget`
-- *"How many memories do you have?"* → `memory_stats`
+- *"What do you remember about my project setup?"* → `memorybank_search`
+- *"That's wrong, I moved to us-east1"* → `memorybank_correct`
+- *"Forget everything about the old deployment"* → `memorybank_forget`
+- *"How many memories do you have?"* → `memorybank_stats`
 
 **Can I disable the tools?** Not individually — they're registered when the plugin loads. If you don't want the agent to use them, the model won't call them unless the conversation context makes them relevant.
 
-**What about `memory_inspect`?** It was removed as overbuilt — `memory_search` already returns full details (ID, fact, score, topic, timestamps). Raw inspection by ID is a developer/debug concern, not an agent need.
+**What about `memory_inspect`?** It was removed as overbuilt — `memorybank_search` already returns full details (ID, fact, score, topic, timestamps). Raw inspection by ID is a developer/debug concern, not an agent need.
 
 ---
 
@@ -300,4 +300,4 @@ https://{LOCATION}-aiplatform.googleapis.com/v1beta1/projects/{PROJECT}/location
 - [Memory on GKE](https://github.com/GoogleCloudPlatform/generative-ai/blob/main/agents/gke/agents_with_memory/get_started_with_memory_for_adk_in_gke.ipynb)
 
 ### Plugin Repository
-- [openclaw-vertex-memorybank](https://github.com/Shubhamsaboo/openclaw-vertex-memorybank)
+- [openclaw-vertexai-memorybank](https://github.com/Shubhamsaboo/openclaw-vertexai-memorybank)

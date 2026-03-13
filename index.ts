@@ -706,9 +706,9 @@ const plugin = {
 
     // --- Agent tools ---
 
-    // memory_search — Search memories by semantic similarity
+    // memorybank_search — Search memories by semantic similarity
     api.registerTool({
-      name: "memory_search",
+      name: "memorybank_search",
       description: "Search the Memory Bank for memories semantically similar to a query. Returns matching facts with similarity scores, topics, and timestamps.",
       label: "Memory Search",
       parameters: {
@@ -741,9 +741,9 @@ const plugin = {
       },
     });
 
-    // memory_forget — Delete a memory by ID
+    // memorybank_forget — Delete a memory by ID
     api.registerTool({
-      name: "memory_forget",
+      name: "memorybank_forget",
       description: "Delete (forget) a specific memory by its ID. Permanently removes it from the Memory Bank.",
       label: "Memory Forget",
       parameters: {
@@ -784,9 +784,9 @@ const plugin = {
       },
     });
 
-    // memory_correct — Update a memory's fact text
+    // memorybank_correct — Update a memory's fact text
     api.registerTool({
-      name: "memory_correct",
+      name: "memorybank_correct",
       description: "Update/correct a memory's fact text. The old memory is replaced with the corrected version.",
       label: "Memory Correct",
       parameters: {
@@ -878,9 +878,9 @@ const plugin = {
       },
     });
 
-    // memory_stats — Get memory statistics (uses lightweight field-masked count)
+    // memorybank_stats — Get memory statistics (uses lightweight field-masked count)
     api.registerTool({
-      name: "memory_stats",
+      name: "memorybank_stats",
       description: "Get Memory Bank statistics: total count, breakdown by topic, and scope info. Uses a cached count (5-min TTL) to avoid unnecessary API calls.",
       label: "Memory Stats",
       parameters: {
