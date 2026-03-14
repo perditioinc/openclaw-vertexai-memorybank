@@ -4,7 +4,7 @@ Managed long-term memory for your OpenClaw agents, powered by [Vertex AI Memory 
 
 ### Why you need memory beyond OpenClaw core
 
-OpenClaw's built-in memory is per-agent and per-session. This plugin adds **user-scoped memory that works across all your agents**, so when you tell one agent your preferences, every agent remembers. Scope by user, by project, or however you want. Your agent's memory grows with you, not with each individual chat.
+OpenClaw's built-in memory is per-agent and per-session. This plugin adds **user-scoped memory that works across all your agents**, so when you tell one agent your preferences, every agent remembers. Scope by user, by project, or however you want. Your agent's memory compounds over time, not resets with each session.
 
 ### Why Vertex AI Memory Bank
 
