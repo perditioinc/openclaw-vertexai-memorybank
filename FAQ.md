@@ -101,13 +101,18 @@ Memories are scoped by arbitrary key-value pairs. **Scope matching is exact** �
 
 **Why not include agent name or channel?** If you scope as `{user_id: "alan", agent_name: "zaf"}`, then memories created by agent "zaf" won't be found when agent "helper" retrieves for the same user. Memories fragment across agents/channels.
 
-**For agent-specific tagging**, use `metadata` (not scope). Metadata is filterable but doesn't affect consolidation boundaries:
+**For agent-specific tagging**, use `metadata` (not scope). The Memory resource has a `metadata` field (`map<string, MemoryMetadataValue>`) that doesn't affect consolidation boundaries:
 
 ```json
 {
-  "metadata": { "source_agent": "zaf", "channel": "discord" }
+  "metadata": {
+    "source_agent": { "stringValue": "zaf" },
+    "channel": { "stringValue": "discord" }
+  }
 }
 ```
+
+> **⚠️ Limitation:** Metadata can only be set via `memories.create` (direct write) or `memories.patch` (update). The `memories:generate` consolidation pipeline — which is what this plugin uses for auto-capture, file sync, and `memorybank-remember` — does **not** propagate metadata to the memories it creates. To tag generated memories, you'd need a post-generate step: list newly created memories and patch them with the desired metadata. This plugin does not implement that today.
 
 Scope is **immutable** once set on a memory — choose wisely.
 
