@@ -6,7 +6,7 @@ import { join } from "path";
 
 // --- User-Agent ---
 const PLUGIN_VERSION = "0.1.0";
-const USER_AGENT = `openclaw-vertex-memorybank/${PLUGIN_VERSION}`;
+const USER_AGENT = `openclaw-vertexai-memorybank/${PLUGIN_VERSION}`;
 
 /** Shared fetch wrapper that injects User-Agent on every request. */
 async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
