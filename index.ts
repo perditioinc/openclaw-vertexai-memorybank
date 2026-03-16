@@ -4,6 +4,17 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "
 import { join } from "path";
 // No runtime dependencies — tool parameters use plain JSON Schema objects
 
+// --- User-Agent ---
+const PLUGIN_VERSION = "0.1.0";
+const USER_AGENT = `openclaw-vertex-memorybank/${PLUGIN_VERSION}`;
+
+/** Shared fetch wrapper that injects User-Agent on every request. */
+async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  headers.set("User-Agent", USER_AGENT);
+  return fetch(url, { ...init, headers });
+}
+
 // --- Auth ---
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
@@ -210,7 +221,7 @@ function apiBase(cfg: MemoryBankConfig): string {
 async function apiCall(cfg: MemoryBankConfig, path: string, body: any, method = "POST"): Promise<any> {
   const token = getAccessToken();
   const url = `${apiBase(cfg)}/${path}`;
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: method !== "GET" ? JSON.stringify(body) : undefined,
@@ -347,7 +358,7 @@ async function syncInstanceConfig(cfg: MemoryBankConfig): Promise<void> {
       };
     }
 
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -387,7 +398,7 @@ async function fireAndForget(ctx: GenerateContext, path: string, body: any): Pro
   const token = getAccessToken();
   const url = `https://${ctx.location}-aiplatform.googleapis.com/v1beta1/${path}`;
   try {
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -455,7 +466,7 @@ async function deleteMemory(cfg: MemoryBankConfig, memoryId: string): Promise<vo
   const parent = parentName(cfg);
   const token = getAccessToken();
   const url = `https://${cfg.location}-aiplatform.googleapis.com/v1beta1/${parent}/memories/${memoryId}`;
-  const resp = await fetch(url, {
+  const resp = await apiFetch(url, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -518,7 +529,7 @@ async function countMemories(cfg: MemoryBankConfig, opts?: { force?: boolean }):
 
       const token = getAccessToken();
       const url = `${apiBase(cfg)}/${parent}/memories?${params.toString()}`;
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -569,7 +580,7 @@ async function listMemories(
 
       const token = getAccessToken();
       const url = `${apiBase(cfg)}/${parent}/memories?${params.toString()}`;
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -759,7 +770,7 @@ const plugin = {
         try {
           const token = getAccessToken();
           const url = `${apiBase(config)}/${memoryName}`;
-          const res = await fetch(url, {
+          const res = await apiFetch(url, {
             method: "DELETE",
             headers: { Authorization: `Bearer ${token}` },
           });
@@ -808,7 +819,7 @@ const plugin = {
           let lastRes!: Response;
           for (let attempt = 0; attempt < maxRetries; attempt++) {
             const token = getAccessToken();
-            lastRes = await fetch(`${base}/${memoryName}?updateMask=fact`, {
+            lastRes = await apiFetch(`${base}/${memoryName}?updateMask=fact`, {
               method: "PATCH",
               headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
               body: JSON.stringify({ fact: params.new_fact }),
@@ -836,7 +847,7 @@ const plugin = {
 
           // 400/404: memory may not exist. Confirm with GET, then create.
           if (res.status === 400 || res.status === 404) {
-            const getRes = await fetch(`${base}/${memoryName}`, {
+            const getRes = await apiFetch(`${base}/${memoryName}`, {
               method: "GET",
               headers: { Authorization: `Bearer ${getAccessToken()}` },
             });
